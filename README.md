@@ -8,4 +8,4 @@ Below you can find the roadmap of things i have to add, i will later publish a l
 
 In total, i plan to add 8 races, 10 player classes, and 70 abilities (7 per class, each linked to z, x, c, v, b, n, m 
 
-![Files i still have to work] (https://github.com/GorrGodSlayer/McMMORPG_Indev/blob/main/Roadmap.png))
+![Files i still have to work] (https://i.ibb.co/ycfysWM8/Roadmap.png)
