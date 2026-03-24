@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────
+#  MMORPGPlugin  ·  config.yml
+#  Use /mmorpg reload to hot-apply changes.
+# ─────────────────────────────────────────────────────
+
+mana:
+  default-max: 100.0
+  default-regen: 2.0
+  regen-interval-ticks: 20
+  action-bar-refresh-ticks: 10
+
+  action-bar:
+    # Number of spaces added on each side to center the bar on screen.
+    # Increase this if the bar sits too far left on your client resolution.
+    padding-spaces: 12
+
+    # Number of segments in the visual bar. 24 fills roughly 1/3 of the
+    # action bar line at default Minecraft GUI scale.
+    bar-length: 24
+
+    bar-filled-char: "█"
+    bar-empty-char:  "░"
+
+    # Hex colors — must be exactly #RRGGBB
+    bar-filled-color: "#5599FF"   # bright blue  — filled mana
+    bar-empty-color:  "#1a2a44"   # dark navy     — empty mana
+    label-color:      "#88aaff"   # soft blue     — "✦ Mana" text
+    value-color:      "#cce0ff"   # light blue    — "cur/max" numbers
+
+# ── Souls ─────────────────────────────────────────────
+souls:
+  # Souls awarded for kills not listed in values below
+  default-value: 1
+
+  action-bar:
+    label-color: "#cc88ff"   # soft purple  — "◆ Souls" text
+    value-color: "#eeccff"   # light purple — soul count number
+
+  # Per-mob soul values. Key must match Bukkit EntityType exactly.
+  # Full list: https://jd.papermc.io/paper/1.21/org/bukkit/entity/EntityType.html
+  values:
+    # ── Common overworld ──────────────────────────────
+    ZOMBIE:            1
+    SKELETON:          1
+    SPIDER:            1
+    CAVE_SPIDER:       2
+    CREEPER:           3
+    WITCH:             4
+    ENDERMAN:          5
+    # ── Nether ────────────────────────────────────────
+    BLAZE:             4
+    GHAST:             5
+    MAGMA_CUBE:        2
+    PIGLIN_BRUTE:      6
+    WITHER_SKELETON:   8
+    # ── End ───────────────────────────────────────────
+    SHULKER:           6
+    # ── Bosses ────────────────────────────────────────
+    ELDER_GUARDIAN:   20
+    WITHER:           50
+    ENDER_DRAGON:    200
+
+# ── Integrations ──────────────────────────────────────
+integrations:
+  kingdoms: true
+  oraxen: true
+
+# ── Storage ───────────────────────────────────────────
+storage:
+  player-data-folder: playerdata
+  autosave-interval: 60

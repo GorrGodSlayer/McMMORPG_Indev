@@ -1,0 +1,28 @@
+name: MMORPGPlugin
+version: '0.1.0'
+main: com.mmorpg.plugin.core.MMORPGPlugin
+api-version: '1.21'
+description: Custom MMORPG layer — races, classes, mana, and abilities.
+authors: [ YourName ]
+
+softdepend:
+  - Kingdoms
+  - Oraxen
+
+commands:
+  mana:
+    description: Mana admin command — set, get, refill, regen
+    usage: /mana <set|setmax|setregen|fill|get|help> [player] [value]
+    permission: mmorpg.admin.mana
+  mmorpg:
+    description: Top-level admin command
+    usage: /mmorpg <reload|debug> [player]
+    permission: mmorpg.admin
+
+permissions:
+  mmorpg.admin:
+    description: Full admin access to all MMORPGPlugin commands
+    default: op
+  mmorpg.admin.mana:
+    description: Access to /mana admin commands
+    default: op
