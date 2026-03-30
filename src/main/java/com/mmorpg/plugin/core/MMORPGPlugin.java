@@ -1,132 +1,96 @@
 package com.mmorpg.plugin.core;
 
+import com.mmorpg.plugin.commands.CastCommand;
 import com.mmorpg.plugin.commands.ManaCommand;
 import com.mmorpg.plugin.commands.MmorpgCommand;
 import com.mmorpg.plugin.data.DataManager;
+import com.mmorpg.plugin.listeners.CombatListener;
 import com.mmorpg.plugin.listeners.MobKillListener;
 import com.mmorpg.plugin.listeners.PlayerConnectionListener;
-import com.mmorpg.plugin.systems.mana.ManaSystem;
+import com.mmorpg.plugin.listeners.StaminaListener;
+import com.mmorpg.plugin.systems.hud.HudSystem;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.logging.Level;
 
 /**
  * MMORPGPlugin — entry point.
  *
  * Startup order:
- *   1. DataManager          (must be first — everything else reads from it)
- *   2. ManaSystem           (depends on DataManager)
- *   3. Listeners            (depend on all systems)
- *   4. Commands             (depend on all systems)
- *
- * More managers (RaceManager, ClassManager, AbilityManager, etc.)
- * will be registered here as they are built in later sprints.
+ *   1. DataManager   — cache + persistence (must be first)
+ *   2. HudSystem     — all regen loops + action bar display
+ *   3. Listeners     — route events to systems
+ *   4. Commands      — player and admin commands
  */
 public final class MMORPGPlugin extends JavaPlugin {
 
-    // ── Singleton access ────────────────────────────────────────────────────
     private static MMORPGPlugin instance;
+    public static MMORPGPlugin getInstance() { return instance; }
 
-    public static MMORPGPlugin getInstance() {
-        return instance;
-    }
-
-    // ── Manager references ──────────────────────────────────────────────────
-    private DataManager dataManager;
-    private ManaSystem manaSystem;
+    private DataManager  dataManager;
+    private HudSystem    hudSystem;
     private MobKillListener mobKillListener;
-
-    // ── Lifecycle ───────────────────────────────────────────────────────────
 
     @Override
     public void onEnable() {
         instance = this;
-
-        // Save default config.yml if not already present
         saveDefaultConfig();
 
         getLogger().info("=== MMORPGPlugin starting up ===");
 
-        // 1. Data layer — must come first
         dataManager = new DataManager(this);
         dataManager.init();
 
-        // 2. Mana system
-        manaSystem = new ManaSystem(this, dataManager);
-        manaSystem.start();
+        hudSystem = new HudSystem(this, dataManager);
+        hudSystem.start();
 
-        // 3. Listeners
         registerListeners();
-
-        // 4. Commands
         registerCommands();
 
-        getLogger().info("=== MMORPGPlugin ready. ===");
+        getLogger().info("=== MMORPGPlugin ready ===");
     }
 
     @Override
     public void onDisable() {
-        // Stop the mana regen loop before we flush data
-        if (manaSystem != null) {
-            manaSystem.stop();
-        }
-
-        // Flush ALL online player data to disk regardless of dirty flag
-        if (dataManager != null) {
-            dataManager.saveAll();
-            getLogger().info("All player data saved.");
-        }
-
-        getLogger().info("=== MMORPGPlugin disabled. ===");
+        if (hudSystem   != null) hudSystem.stop();
+        if (dataManager != null) dataManager.saveAll();
+        getLogger().info("=== MMORPGPlugin disabled ===");
     }
 
-    // ── Private helpers ─────────────────────────────────────────────────────
-
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(
-                new PlayerConnectionListener(this, dataManager, manaSystem), this);
-        mobKillListener = new MobKillListener(this, dataManager, manaSystem);
-        getServer().getPluginManager().registerEvents(mobKillListener, this);
+        var pm = getServer().getPluginManager();
+
+        pm.registerEvents(new PlayerConnectionListener(this, dataManager, hudSystem), this);
+        pm.registerEvents(new StaminaListener(this, dataManager), this);
+        pm.registerEvents(new CombatListener(this, dataManager, hudSystem), this);
+
+        mobKillListener = new MobKillListener(this, dataManager, hudSystem);
+        pm.registerEvents(mobKillListener, this);
     }
 
     private void registerCommands() {
-        // /mana — admin mana control
-        ManaCommand manaCmd = new ManaCommand(this, dataManager, manaSystem);
-        var manaExecutor = getCommand("mana");
-        if (manaExecutor != null) {
-            manaExecutor.setExecutor(manaCmd);
-            manaExecutor.setTabCompleter(manaCmd);
-        } else {
-            getLogger().warning("Could not register /mana — is it in plugin.yml?");
-        }
+        // /mana
+        var manaCmd = new ManaCommand(this, dataManager, hudSystem);
+        var mana = getCommand("mana");
+        if (mana != null) { mana.setExecutor(manaCmd); mana.setTabCompleter(manaCmd); }
 
-        // /mmorpg — top-level admin
-        MmorpgCommand mmorpgCmd = new MmorpgCommand(this, dataManager);
-        var mmorpgExecutor = getCommand("mmorpg");
-        if (mmorpgExecutor != null) {
-            mmorpgExecutor.setExecutor(mmorpgCmd);
-            mmorpgExecutor.setTabCompleter(mmorpgCmd);
-        }
+        // /mmorpg
+        var mmorpgCmd = new MmorpgCommand(this, dataManager);
+        var mmorpg = getCommand("mmorpg");
+        if (mmorpg != null) { mmorpg.setExecutor(mmorpgCmd); mmorpg.setTabCompleter(mmorpgCmd); }
+
+        // /cast
+        var castCmd = new CastCommand(this, dataManager, hudSystem);
+        var cast = getCommand("cast");
+        if (cast != null) { cast.setExecutor(castCmd); cast.setTabCompleter(castCmd); }
     }
 
-    // ── Public accessors ────────────────────────────────────────────────────
-
-    public DataManager getDataManager() {
-        return dataManager;
-    }
-
-    public ManaSystem getManaSystem() {
-        return manaSystem;
-    }
-
-    /**
-     * Reload config.yml and propagate changes to active systems.
-     * Called by /mmorpg reload.
-     */
     public void reload() {
         reloadConfig();
-        manaSystem.reloadConfig();
+        hudSystem.reloadConfig();
+        dataManager.reloadConfig();
         if (mobKillListener != null) mobKillListener.loadConfig();
         getLogger().info("Configuration reloaded.");
     }
+
+    public DataManager getDataManager() { return dataManager; }
+    public HudSystem   getHudSystem()   { return hudSystem;   }
 }

@@ -1,0 +1,13 @@
+com\mmorpg\plugin\data\PlayerData.class
+com\mmorpg\plugin\abilities\DemoAoeBurst.class
+com\mmorpg\plugin\commands\CastCommand.class
+com\mmorpg\plugin\listeners\MobKillListener.class
+com\mmorpg\plugin\core\MMORPGPlugin.class
+com\mmorpg\plugin\systems\hud\HudSystem.class
+com\mmorpg\plugin\listeners\StaminaListener.class
+com\mmorpg\plugin\listeners\PlayerConnectionListener.class
+com\mmorpg\plugin\commands\ManaCommand.class
+com\mmorpg\plugin\listeners\CombatListener.class
+com\mmorpg\plugin\data\DataManager.class
+com\mmorpg\plugin\commands\MmorpgCommand.class
+com\mmorpg\plugin\abilities\DemoAoeBurst$1.class

@@ -11,32 +11,29 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Level;
 
 /**
- * DataManager — owns the in-memory PlayerData cache and all disk I/O.
- *
- * Rules:
- *   - No other class reads or writes YAML files directly.
- *   - Every system calls DataManager.get(uuid) and works against
- *     the shared in-memory PlayerData instance.
- *   - Autosave flushes only dirty records every N seconds.
- *   - saveAll() flushes everything (called on onDisable).
+ * DataManager — in-memory cache and YAML persistence.
+ * Only class that reads or writes player YAML files.
  */
 public class DataManager {
 
     private final MMORPGPlugin plugin;
-
-    /** The single in-memory cache: one PlayerData per online player. */
     private final Map<UUID, PlayerData> cache = new HashMap<>();
 
     private File playerDataFolder;
     private BukkitTask autosaveTask;
 
-    // ── Default mana values (applied when no saved data exists) ──────────────
-    // These will later be replaced by class-specific baselines.
+    // ── Defaults (from config, applied to new players) ────────────────────────
     private double defaultMaxMana;
     private double defaultManaRegen;
+    private double defaultMaxHealth;
+    private double defaultHealthRegen;
+    private double defaultMaxStamina;
+    private double defaultStaminaRegen;
+    private double defaultSprintDrain;
+    private double defaultJumpDrain;
+    private double defaultMaxArmour;
 
     public DataManager(MMORPGPlugin plugin) {
         this.plugin = plugin;
@@ -45,7 +42,6 @@ public class DataManager {
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     public void init() {
-        // Resolve / create the playerdata folder
         playerDataFolder = new File(
                 plugin.getDataFolder(),
                 plugin.getConfig().getString("storage.player-data-folder", "playerdata")
@@ -53,172 +49,146 @@ public class DataManager {
         if (!playerDataFolder.exists() && !playerDataFolder.mkdirs()) {
             plugin.getLogger().severe("Could not create playerdata folder!");
         }
-
         loadConfigValues();
         startAutosave();
-
-        plugin.getLogger().info("DataManager initialised. Player data folder: "
-                + playerDataFolder.getAbsolutePath());
+        plugin.getLogger().info("DataManager initialised.");
     }
 
     private void loadConfigValues() {
-        defaultMaxMana   = plugin.getConfig().getDouble("mana.default-max",   100.0);
-        defaultManaRegen = plugin.getConfig().getDouble("mana.default-regen",   2.0);
+        var c = plugin.getConfig();
+        defaultMaxMana      = c.getDouble("mana.default-max",              100.0);
+        defaultManaRegen    = c.getDouble("mana.default-regen",              2.0);
+        defaultMaxHealth    = c.getDouble("health.default-max",             500.0);
+        defaultHealthRegen  = c.getDouble("health.default-regen",            1.0);
+        defaultMaxStamina   = c.getDouble("stamina.default-max",            100.0);
+        defaultStaminaRegen = c.getDouble("stamina.default-regen",           5.0);
+        defaultSprintDrain  = c.getDouble("stamina.sprint-drain-per-tick",   1.0);
+        defaultJumpDrain    = c.getDouble("stamina.jump-drain",              10.0);
+        defaultMaxArmour    = c.getDouble("armour.default-max",             200.0);
     }
 
     private void startAutosave() {
-        int intervalSeconds = plugin.getConfig().getInt("storage.autosave-interval", 60);
-        long intervalTicks  = intervalSeconds * 20L;
-
-        autosaveTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(
-                plugin,
-                this::saveDirty,
-                intervalTicks,
-                intervalTicks
-        );
-        plugin.getLogger().info("Autosave scheduled every " + intervalSeconds + " seconds.");
+        int secs = plugin.getConfig().getInt("storage.autosave-interval", 60);
+        long ticks = secs * 20L;
+        autosaveTask = plugin.getServer().getScheduler()
+                .runTaskTimerAsynchronously(plugin, this::saveDirty, ticks, ticks);
+        plugin.getLogger().info("Autosave every " + secs + "s.");
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /**
-     * Returns the PlayerData for a given UUID, or null if not loaded.
-     * Will always return non-null for an online player after loadPlayer() has been called.
-     */
-    public PlayerData get(UUID uuid) {
-        return cache.get(uuid);
-    }
+    public PlayerData get(UUID uuid)   { return cache.get(uuid); }
+    public PlayerData get(Player p)    { return cache.get(p.getUniqueId()); }
+    public Collection<PlayerData> getAll() { return cache.values(); }
 
-    /** Convenience overload — accepts a Player directly. */
-    public PlayerData get(Player player) {
-        return cache.get(player.getUniqueId());
-    }
-
-    /**
-     * Loads a player's data from disk into the cache.
-     * Called by PlayerConnectionListener on PlayerJoinEvent.
-     * If no saved file exists, creates a fresh PlayerData with defaults.
-     */
     public PlayerData loadPlayer(UUID uuid) {
         File file = playerFile(uuid);
         PlayerData data;
-
         if (file.exists()) {
-            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-            data = deserialize(uuid, yaml);
-            plugin.getLogger().info("Loaded player data for " + uuid);
+            data = deserialize(uuid, YamlConfiguration.loadConfiguration(file));
+            plugin.getLogger().info("Loaded data for " + uuid);
         } else {
-            data = new PlayerData(uuid, defaultMaxMana, defaultManaRegen);
-            plugin.getLogger().info("No save file for " + uuid + " — created default PlayerData.");
+            data = freshData(uuid);
+            plugin.getLogger().info("New player " + uuid + " — created defaults.");
         }
-
         cache.put(uuid, data);
         return data;
     }
 
-    /**
-     * Saves a single player's data to disk unconditionally.
-     * Clears the dirty flag after writing.
-     * Called on player quit and by saveAll().
-     */
     public void savePlayer(UUID uuid) {
         PlayerData data = cache.get(uuid);
         if (data == null) return;
-
-        File file = playerFile(uuid);
-        YamlConfiguration yaml = serialize(data);
-
         try {
-            yaml.save(file);
+            serialize(data).save(playerFile(uuid));
             data.clearDirty();
         } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE,
-                    "Failed to save player data for " + uuid, e);
+            plugin.getLogger().severe("Failed to save " + uuid + ": " + e.getMessage());
         }
     }
 
-    /**
-     * Removes a player's data from the cache after saving.
-     * Called by PlayerConnectionListener on PlayerQuitEvent.
-     */
     public void unloadPlayer(UUID uuid) {
         savePlayer(uuid);
         cache.remove(uuid);
     }
 
-    /**
-     * Saves all cached PlayerData to disk regardless of dirty flag.
-     * Called on onDisable() to guarantee nothing is lost on shutdown.
-     */
     public void saveAll() {
         if (autosaveTask != null) autosaveTask.cancel();
-        for (UUID uuid : cache.keySet()) {
-            savePlayer(uuid);
-        }
-        plugin.getLogger().info("Saved " + cache.size() + " player data file(s).");
+        cache.keySet().forEach(this::savePlayer);
+        plugin.getLogger().info("Saved " + cache.size() + " player file(s).");
     }
 
-    /** Returns all currently loaded PlayerData objects (one per online player). */
-    public Collection<PlayerData> getAll() {
-        return cache.values();
+    public void reloadConfig() { loadConfigValues(); }
+
+    // ── Serialization ─────────────────────────────────────────────────────────
+
+    private YamlConfiguration serialize(PlayerData d) {
+        var y = new YamlConfiguration();
+
+        y.set("mana.current",  d.getMana());
+        y.set("mana.max",      d.getMaxMana());
+        y.set("mana.regen",    d.getManaRegen());
+
+        y.set("health.current", d.getHealth());
+        y.set("health.max",     d.getMaxHealth());
+        y.set("health.regen",   d.getHealthRegen());
+
+        y.set("stamina.current", d.getStamina());
+        y.set("stamina.max",     d.getMaxStamina());
+        y.set("stamina.regen",   d.getStaminaRegen());
+
+        y.set("armour.current", d.getArmour());
+        y.set("armour.max",     d.getMaxArmour());
+
+        y.set("souls", d.getSouls());
+
+        return y;
     }
 
-    /**
-     * Reloads config values (called by /mmorpg reload).
-     * Does NOT re-read existing player files — only updates defaults
-     * for new players who join after the reload.
-     */
-    public void reloadConfig() {
-        loadConfigValues();
+    private PlayerData deserialize(UUID uuid, YamlConfiguration y) {
+        double maxMana      = y.getDouble("mana.max",      defaultMaxMana);
+        double manaRegen    = y.getDouble("mana.regen",    defaultManaRegen);
+        double maxHealth    = y.getDouble("health.max",    defaultMaxHealth);
+        double healthRegen  = y.getDouble("health.regen",  defaultHealthRegen);
+        double maxStamina   = y.getDouble("stamina.max",   defaultMaxStamina);
+        double staminaRegen = y.getDouble("stamina.regen", defaultStaminaRegen);
+        double maxArmour    = y.getDouble("armour.max",    defaultMaxArmour);
+
+        PlayerData d = new PlayerData(uuid,
+                maxMana, manaRegen,
+                maxHealth, healthRegen,
+                maxStamina, staminaRegen,
+                defaultSprintDrain, defaultJumpDrain,
+                maxArmour);
+
+        d.setMana(    y.getDouble("mana.current",    maxMana));
+        d.setHealth(  y.getDouble("health.current",  maxHealth));
+        d.setStamina( y.getDouble("stamina.current", maxStamina));
+        d.setArmour(  y.getDouble("armour.current",  maxArmour));
+        d.setSouls(   y.getLong(  "souls",           0L));
+
+        return d;
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    private PlayerData freshData(UUID uuid) {
+        return new PlayerData(uuid,
+                defaultMaxMana,    defaultManaRegen,
+                defaultMaxHealth,  defaultHealthRegen,
+                defaultMaxStamina, defaultStaminaRegen,
+                defaultSprintDrain, defaultJumpDrain,
+                defaultMaxArmour);
+    }
 
-    /** Saves only dirty PlayerData entries. Called by the autosave scheduler. */
+    // ── Private ───────────────────────────────────────────────────────────────
+
     private void saveDirty() {
-        int count = 0;
-        for (Map.Entry<UUID, PlayerData> entry : cache.entrySet()) {
-            if (entry.getValue().isDirty()) {
-                savePlayer(entry.getKey());
-                count++;
-            }
+        int n = 0;
+        for (var e : cache.entrySet()) {
+            if (e.getValue().isDirty()) { savePlayer(e.getKey()); n++; }
         }
-        if (count > 0) {
-            plugin.getLogger().info("Autosave: flushed " + count + " dirty player record(s).");
-        }
+        if (n > 0) plugin.getLogger().info("Autosave: flushed " + n + " record(s).");
     }
 
     private File playerFile(UUID uuid) {
         return new File(playerDataFolder, uuid + ".yml");
-    }
-
-    // ── Serialisation ─────────────────────────────────────────────────────────
-
-    private YamlConfiguration serialize(PlayerData data) {
-        YamlConfiguration yaml = new YamlConfiguration();
-
-        // Mana
-        yaml.set("mana.current",  data.getMana());
-        yaml.set("mana.max",      data.getMaxMana());
-        yaml.set("mana.regen",    data.getManaRegen());
-
-        // Sprint 2+: race, class, level, xp, abilities will be added here
-
-        return yaml;
-    }
-
-    private PlayerData deserialize(UUID uuid, YamlConfiguration yaml) {
-        double maxMana   = yaml.getDouble("mana.max",   defaultMaxMana);
-        double manaRegen = yaml.getDouble("mana.regen", defaultManaRegen);
-
-        PlayerData data = new PlayerData(uuid, maxMana, manaRegen);
-
-        // Restore current mana — defaults to maxMana if key is absent
-        double current = yaml.getDouble("mana.current", maxMana);
-        data.setMana(current);
-
-        // Sprint 2+: race, class, level, xp, abilities will be read here
-
-        return data;
     }
 }
