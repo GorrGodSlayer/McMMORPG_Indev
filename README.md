@@ -12,10 +12,25 @@ In total, i plan to add 8 races, 10 player classes, and 70 abilities (7 per clas
 
 ## Working commands as of now
 
-/mana set <player> <value> — set current mana to any value
-/mana setmax <player> <value> — change max mana
-/mana setregen <player> <value> — change regen rate per tick
-/mana fill <player> — instantly fill to max
-/mana get <player> — print full mana breakdown
+/mana — requires mmorpg.admin.mana (op only)
+
+/mana set <player> <value> — set a player's current mana to any value
+/mana setmax <player> <value> — set a player's max mana
+/mana setregen <player> <value> — set mana regen per tick
+/mana fill <player> — instantly fill mana to max
+/mana get <player> — print full mana breakdown to chat
+
+
+/mmorpg — requires mmorpg.admin (op only)
+
+/mmorpg reload — hot-reload config.yml without restarting
+/mmorpg debug <player> — dump a player's full PlayerData to chat
+
+
+/cast — no permission required (any player)
+
+/cast demo — fires the AOE Burst demo ability (costs 30 mana, 20 stamina, 25% health, 8s cooldown)
+/cast help — shows cost/cooldown info for demo abilities
+
 /mmorpg reload — hot-reload config without restart
 /mmorpg debug <player> — dump all PlayerData fields to chat
