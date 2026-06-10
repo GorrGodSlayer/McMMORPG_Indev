@@ -34,3 +34,32 @@ In total, i plan to add 8 races, 10 player classes, and 70 abilities (7 per clas
 
 /mmorpg reload — hot-reload config without restart
 /mmorpg debug <player> — dump all PlayerData fields to chat
+
+Plugin structure so far:
+McMMORPG_Indev/
+├── pom.xml                                    [Maven build configuration - Java 21, Paper API 1.21.4]
+├── README.md                                  [Project roadmap and command reference]
+├── src/main/
+│   ├── java/com/mmorpg/plugin/
+│   │   ├── core/
+│   │   │   └── MMORPGPlugin.java             [Main plugin entry point]
+│   │   ├── data/
+│   │   │   ├── DataManager.java              [Player data cache + YAML persistence]
+│   │   │   └── PlayerData.java               [Single player's MMORPG state]
+│   │   ├── systems/hud/
+│   │   │   └── HudSystem.java                [Two-layer HUD display + regen loops]
+│   │   ├── listeners/
+│   │   │   ├── PlayerConnectionListener.java [Join/quit handling]
+│   │   │   ├── StaminaListener.java          [Sprint tracking + jump detection]
+│   │   │   ├── CombatListener.java           [Custom damage routing]
+│   │   │   └── MobKillListener.java          [Soul reward on mob kill]
+│   │   ├── commands/
+│   │   │   ├── MmorpgCommand.java            [/mmorpg admin command]
+│   │   │   ├── ManaCommand.java              [/mana admin mana control]
+│   │   │   └── CastCommand.java              [/cast ability executor]
+│   │   └── abilities/
+│   │       └── DemoAoeBurst.java             [Proof-of-concept ability]
+│   └── resources/
+│       ├── plugin.yml                        [Plugin metadata + permissions]
+│       └── config.yml                        [Stat defaults, HUD colors, soul values]
+└── target/                                    [Maven build output]
